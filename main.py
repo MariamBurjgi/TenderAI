@@ -1,9 +1,36 @@
 import streamlit as st
+import streamlit as st
 import pdfplumber
 from docx import Document
 import io
 import re
 from openai import OpenAI
+
+def check_password():
+    """აბრუნებს True-ს თუ პაროლი სწორია, სხვა შემთხვევაში False."""
+    
+    # თუ პაროლი ჯერ არ შეუყვანიათ ან არასწორია
+    if "password_correct" not in st.session_state:
+        st.session_state.password_correct = False
+
+    if not st.session_state.password_correct:
+        # პაროლის შესაყვანი ველი
+        password_input = st.text_input("შეიყვანეთ წვდომის კოდი", type="password")
+        
+        if st.button("შესვლა"):
+            # ვამოწმებთ სეიფში შენახულ პაროლთან
+            if password_input == st.secrets["APP_PASSWORD"]:
+                st.session_state.password_correct = True
+                st.rerun() # გვერდს გადატვირთავს და შეუშვებს
+            else:
+                st.error("❌ პაროლი არასწორია!")
+        return False
+    return True
+
+# თუ პაროლი არასწორია, კოდი აქ ჩერდება და ქვემოთ აღარ მიდის
+if not check_password():
+    st.stop()
+
 
 # --- სეიფის გახსნა ---
 if "OPENAI_API_KEY" in st.secrets:
