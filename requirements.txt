@@ -2,3 +2,5 @@ streamlit
 pdfplumber
 python-docx
 openai
+pandas
+openpyxl

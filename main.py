@@ -1,46 +1,48 @@
 import streamlit as st
-import streamlit as st
 import pdfplumber
+import pandas as pd
 from docx import Document
 import io
 import re
 from openai import OpenAI
 
+# --- 1. გვერდის კონფიგურაცია ---
+st.set_page_config(page_title="Tender AI", page_icon="📂")
+
+# --- 2. უსაფრთხოება: პაროლის შემოწმება ---
 def check_password():
-    """აბრუნებს True-ს თუ პაროლი სწორია, სხვა შემთხვევაში False."""
-    
-    # თუ პაროლი ჯერ არ შეუყვანიათ ან არასწორია
+    """აბრუნებს True-ს თუ პაროლი სწორია."""
     if "password_correct" not in st.session_state:
         st.session_state.password_correct = False
 
     if not st.session_state.password_correct:
-        # პაროლის შესაყვანი ველი
+        st.title("🔒 შესვლა სისტემაში")
         password_input = st.text_input("შეიყვანეთ წვდომის კოდი", type="password")
-        
         if st.button("შესვლა"):
-            # ვამოწმებთ სეიფში შენახულ პაროლთან
+            # პაროლი მოაქვს სეიფიდან (secrets.toml)
             if password_input == st.secrets["APP_PASSWORD"]:
                 st.session_state.password_correct = True
-                st.rerun() # გვერდს გადატვირთავს და შეუშვებს
+                st.rerun()
             else:
                 st.error("❌ პაროლი არასწორია!")
         return False
     return True
 
-# თუ პაროლი არასწორია, კოდი აქ ჩერდება და ქვემოთ აღარ მიდის
 if not check_password():
-    st.stop()
+    st.stop() # თუ პაროლი არასწორია, კოდი აქ ჩერდება
 
-
-# --- სეიფის გახსნა ---
+# --- 3. API Key-ს წამოღება სეიფიდან ---
 if "OPENAI_API_KEY" in st.secrets:
     API_KEY = st.secrets["OPENAI_API_KEY"]
 else:
     API_KEY = ""
 
-# --- ფუნქციები ---
+# --- 4. დამხმარე ფუნქციები ---
+
 def extract_contact_info(text):
+    # ელ-ფოსტა
     emails = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', text)
+    # ტელეფონი (მარტივი ფორმატი)
     phones = re.findall(r'\b5\d{2}[-\s]?\d{2}[-\s]?\d{2}[-\s]?\d{2}\b', text)
     return set(emails), set(phones)
 
@@ -61,64 +63,83 @@ def ask_ai(full_text):
     response = client.chat.completions.create(
         model="gpt-4o",
         messages=[
-            {"role": "system", "content": "შენ ხარ ტენდერების ექსპერტი. შეაჯამე მოცემული დოკუმენტაცია."},
-            {"role": "user", "content": f"აი ყველა ფაილის გაერთიანებული ტექსტი:\n\n{full_text[:15000]}"} 
+            {"role": "system", "content": "შენ ხარ ტენდერების ექსპერტი. გააანალიზე PDF (ტექნიკური დავალება) და Excel (ფასები) ერთად."},
+            {"role": "user", "content": f"აი ფაილების ტექსტი:\n\n{full_text[:20000]}"} 
         ]
     )
     return response.choices[0].message.content
 
-# --- ვიზუალი ---
-st.set_page_config(page_title="Tender AI", page_icon="📂")
-st.title("📂 Tender AI - მრავალი ფაილის ანალიზი")
-st.write("მონიშნეთ და გადმოყარეთ ყველა PDF ფაილი ერთად!")
+# --- 5. მთავარი ინტერფეისი ---
 
-# 🔄 ცვლილება 1: accept_multiple_files=True (ბევრი ფაილის მიღება)
+st.title("📂 Tender AI - Pro Version")
+st.write("ატვირთეთ PDF (დავალება) და Excel (ხარჯთაღრიცხვა) ერთად.")
+
+# ატვირთვა (PDF + Excel)
 uploaded_files = st.file_uploader(
-    "ატვირთეთ ფაილები (PDF)", 
-    type="pdf", 
+    "აირჩიეთ ფაილები", 
+    type=["pdf", "xlsx", "xls"], 
     accept_multiple_files=True 
 )
 
-# თუ თუნდაც 1 ფაილი მაინც არის ატვირთული
 if uploaded_files:
     st.success(f"✅ ატვირთულია {len(uploaded_files)} ფაილი!")
     
-    combined_text = "" # აქ შევაგროვებთ ყველა ფაილის ტექსტს ერთად
+    combined_text = ""
     
-    # 🔄 ცვლილება 2: ციკლი (Loop), რომელიც სათითაოდ კითხულობს ფაილებს
+    # ფაილების დამუშავება
     for file in uploaded_files:
-        with pdfplumber.open(file) as pdf:
-            file_text = ""
-            for page in pdf.pages:
-                text = page.extract_text()
-                if text:
-                    file_text += text + "\n"
+        
+        # ---> PDF <---
+        if file.name.endswith(".pdf"):
+            with pdfplumber.open(file) as pdf:
+                file_text = ""
+                for page in pdf.pages:
+                    text = page.extract_text()
+                    if text:
+                        file_text += text + "\n"
+            combined_text += f"\n\n--- PDF ფაილი: {file.name} ---\n{file_text}"
             
-            # თითოეული ფაილის ტექსტს ვაწებებთ საერთო "ქვაბში"
-            combined_text += f"\n\n--- ფაილი: {file.name} ---\n{file_text}"
+        # ---> EXCEL <---
+        elif file.name.endswith(".xlsx") or file.name.endswith(".xls"):
+            try:
+                df = pd.read_excel(file)
+                # ცხრილის ჩვენება საიტზე
+                with st.expander(f"📊 ნახე Excel ცხრილი: {file.name}"):
+                    st.dataframe(df)
+                
+                # ტექსტად ქცევა AI-სთვის
+                excel_text = df.to_string(index=False)
+                combined_text += f"\n\n--- Excel ფაილი: {file.name} ---\n{excel_text}"
+            except Exception as e:
+                st.error(f"Excel-ის შეცდომა: {e}")
 
-    # კონტაქტების პოვნა
+    # კონტაქტების პოვნა და ჩვენება
     emails, phones = extract_contact_info(combined_text)
-    
     with st.sidebar:
-        st.header("📊 ნაპოვნია:")
-        if emails: st.write("📧", ", ".join(emails))
-        if phones: st.write("📱", ", ".join(phones))
+        st.header("🔍 ნაპოვნი ინფორმაცია")
+        if emails: 
+            st.markdown("**📧 ელ-ფოსტები:**")
+            for e in emails: st.code(e)
+        if phones: 
+            st.markdown("**📱 ტელეფონები:**")
+            for p in phones: st.write(p)
 
-    with st.expander("ნახე ყველა ფაილის გაერთიანებული ტექსტი"):
+    # ტექსტის ნახვა
+    with st.expander("ნახე AI-სთვის გაგზავნილი სრული ტექსტი"):
         st.text(combined_text)
     
-    if st.button("გააანალიზე ყველა ფაილი (AI)"):
+    # ანალიზის ღილაკი
+    if st.button("✨ გააანალიზე ყველა ფაილი (AI)"):
         if not API_KEY:
-            st.error("API Key აკლია!")
+            st.error("API Key ვერ მოიძებნა სეიფში!")
         else:
-            with st.spinner("AI კითხულობს ყველა ფაილს..."):
+            with st.spinner("AI ამუშავებს მონაცემებს (PDF + Excel)..."):
                 try:
                     analysis = ask_ai(combined_text)
-                    st.markdown("### 🤖 შემაჯამებელი ანალიზი:")
+                    st.markdown("### 🤖 ანალიზის შედეგი:")
                     st.write(analysis)
                     
                     docx = create_word_docx(analysis)
-                    st.download_button("📥 გადმოწერა Word-ში", docx, "summary.docx")
+                    st.download_button("📥 შედეგის გადმოწერა (.docx)", docx, "tender_analizi.docx")
                 except Exception as e:
-                    st.error(f"შეცდომა: {e}")
+                    st.error(f"AI შეცდომა: {e}")
