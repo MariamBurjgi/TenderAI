@@ -46,7 +46,7 @@ def extract_contact_info(text):
 def create_word_docx(text_content):
     doc = Document()
     
-    def create_word_docx(text_content):
+def create_word_docx(text_content):
     doc = Document()
     
     # --- 1. ძირითადი სტილის შეცვლა (შრიფტი Arial) ---
