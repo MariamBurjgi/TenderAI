@@ -40,10 +40,57 @@ def extract_contact_info(text):
     phones = re.findall(r'\b5\d{2}[-\s]?\d{2}[-\s]?\d{2}[-\s]?\d{2}\b', text)
     return set(emails), set(phones)
 
+# --- განახლებული ფუნქცია: ლამაზი Word-ის შექმნა ---
 def create_word_docx(text_content):
     doc = Document()
-    doc.add_heading('AI სატენდერო ანალიზი', 0)
-    doc.add_paragraph(text_content)
+    
+    # მთავარი სათაური
+    heading = doc.add_heading('AI სატენდერო ანალიზი', 0)
+    heading.alignment = 1 # ცენტრში გასწორება
+
+    # ტექსტის დაშლა ხაზებად
+    lines = text_content.split('\n')
+
+    for line in lines:
+        line = line.strip()
+        if not line: continue # ცარიელ ხაზებს ვტოვებთ
+
+        # 1. სათაურების დამუშავება (###)
+        if line.startswith('### '):
+            clean_text = line.replace('### ', '')
+            doc.add_heading(clean_text, level=2)
+        
+        elif line.startswith('## '):
+            clean_text = line.replace('## ', '')
+            doc.add_heading(clean_text, level=1)
+
+        # 2. ბულეტების დამუშავება (- ან *)
+        elif line.startswith('- ') or line.startswith('* '):
+            clean_text = line.replace('- ', '').replace('* ', '')
+            p = doc.add_paragraph(clean_text, style='List Bullet')
+            # გამუქების შემოწმება ბულეტებშიც
+            if "**" in clean_text:
+                p.clear() # ვშლით ძველს და თავიდან ვაწყობთ გამუქებით
+                parts = clean_text.split("**")
+                for i, part in enumerate(parts):
+                    run = p.add_run(part)
+                    if i % 2 == 1: # ყოველი მეორე ნაწილი გამუქდეს
+                        run.bold = True
+
+        # 3. ჩვეულებრივი ტექსტი + გამუქება (**ტექსტი**)
+        else:
+            p = doc.add_paragraph()
+            # ვამოწმებთ, არის თუ არა გასამუქებელი ადგილები
+            if "**" in line:
+                parts = line.split("**")
+                for i, part in enumerate(parts):
+                    run = p.add_run(part)
+                    if i % 2 == 1: # ლუწი ინდექსი = ჩვეულებრივი, კენტი = გამუქებული
+                        run.bold = True
+            else:
+                p.add_run(line)
+
+    # ფაილის შენახვა მეხსიერებაში
     bio = io.BytesIO()
     doc.save(bio)
     return bio
