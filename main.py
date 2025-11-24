@@ -10,35 +10,23 @@ from logic.document import create_word_from_html
 # 1. კონფიგურაცია
 st.set_page_config(page_title="Tender AI Pro", page_icon="🚀")
 
-# 2. პაროლი
+# 2. პაროლის შემოწმება
 if not check_password():
     st.stop()
 
-# 3. ინტერფეისი
+# 3. მთავარი ინტერფეისი
 st.title("🚀 Tender AI - პროფესიონალი ასისტენტი")
 st.write("ატვირთეთ ნებისმიერი ფაილი (ZIP, PDF, Excel, Word).")
-
-# --- 🔥 ფუნქცია: HTML-ის იდეალური გასუფთავება ---
-def extract_pure_html(text):
-    # 1. ვშლით მარკდაუნის ჩარჩოებს (```html ... ```)
-    text = re.sub(r"```[a-zA-Z]*", "", text).replace("```", "").strip()
-    
-    # 2. ვეძებთ სუფთა HTML-ს (პირველი ტეგიდან ბოლო ტეგამდე)
-    # ეს იპოვის <h2>-ით დაწყებულ და </table>-ით დამთავრებულ ყველაფერს
-    match = re.search(r"<h.*>.*</.*>", text, re.DOTALL)
-    
-    if match:
-        return match.group(0) # ვაბრუნებთ მხოლოდ HTML ნაწილს
-    else:
-        return text # თუ ვერ იპოვა, ვაბრუნებთ როგორც არის
-# ------------------------------------------------
 
 uploaded_files = st.file_uploader("ფაილები", type=["pdf", "xlsx", "xls", "docx", "zip"], accept_multiple_files=True)
 
 if uploaded_files:
     st.success(f"✅ მიღებულია {len(uploaded_files)} ფაილი")
     
+    # ფაილების დამუშავება
     combined_text = read_uploaded_files(uploaded_files)
+
+    # კონტაქტების პოვნა
     emails, phones = extract_contact_info(combined_text)
     
     with st.sidebar:
@@ -46,26 +34,32 @@ if uploaded_files:
         if emails: st.write("📧", ", ".join(emails))
         if phones: st.write("📱", ", ".join(phones))
 
+    # AI ანალიზი და დოკუმენტის შექმნა
     if st.button("✨ დაწერე დოკუმენტი (AI)"):
         with st.spinner("AI მუშაობს..."):
             try:
                 raw_response = ask_ai(combined_text)
                 
-                # ვასუფთავებთ პასუხს
-                html_response = extract_pure_html(raw_response)
+                # --- ტექსტის გასუფთავება (Regex) ---
+                # შლის ```html და მსგავს ჩარჩოებს
+                html_response = re.sub(r"```[a-zA-Z]*", "", raw_response)
+                html_response = html_response.replace("```", "").strip()
+                # -----------------------------------
 
-                # ეკრანზე ჩვენება (HTML-ის ინტერპრეტაცია)
+                # ეკრანზე ჩვენება
                 st.markdown("### 📝 შედეგი:")
                 st.markdown(html_response, unsafe_allow_html=True)
                 
-                # Word-ის შექმნა და გადმოწერა
-                docx = create_word_from_html(html_response)
+                # --- Word-ის შექმნა (ნედლი მასალით) ---
+                # აქ ვატანთ ორ რამეს: 1. ლამაზ პასუხს, 2. ნედლ ტექსტს (combined_text)
+                docx = create_word_from_html(html_response, combined_text)
+                
                 st.download_button(
-                    label="📥 გადმოწერა Word-ში",
+                    label="📥 გადმოწერა Word-ში (სრული პაკეტი)",
                     data=docx,
-                    file_name="Proposal.docx",
+                    file_name="Proposal_Full.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                ) 
+                )
 
             except Exception as e:
                 st.error(f"შეცდომა: {e}")
