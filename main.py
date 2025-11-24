@@ -168,8 +168,12 @@ def process_file(file_bytes, file_name):
                 text_content += para.text + "\n"
         
         # --> EXCEL
-        elif file_name.endswith(".xlsx") or file.name.endswith(".xls"):
+        elif file_name.endswith(".xlsx") or file_name.endswith(".xls"):
             df = pd.read_excel(file_bytes)
+            
+            # ეს ხაზი ასუფთავებს NaN-ებს!
+            df = df.fillna("") 
+            
             text_content = df.to_string(index=False)
             
     except Exception as e:
