@@ -1,3 +1,5 @@
+from docx.shared import Pt, RGBColor, Inches
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 import streamlit as st
 import pdfplumber
 import pandas as pd
@@ -44,51 +46,90 @@ def extract_contact_info(text):
 def create_word_docx(text_content):
     doc = Document()
     
-    # მთავარი სათაური
-    heading = doc.add_heading('AI სატენდერო ანალიზი', 0)
-    heading.alignment = 1 # ცენტრში გასწორება
+    def create_word_docx(text_content):
+    doc = Document()
+    
+    # --- 1. ძირითადი სტილის შეცვლა (შრიფტი Arial) ---
+    style = doc.styles['Normal']
+    font = style.font
+    font.name = 'Arial'
+    font.size = Pt(11)
 
-    # ტექსტის დაშლა ხაზებად
+    # --- 2. მთავარი სათაური (დიდი და ლურჯი) ---
+    title = doc.add_heading('Tender AI - ანალიტიკური რეპორტი', 0)
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    # სათაურის ფერის შეცვლა (მუქი ლურჯი)
+    title_run = title.runs[0]
+    title_run.font.color.rgb = RGBColor(0, 51, 102) 
+    title_run.font.bold = True
+
+    # ხაზი სათაურის ქვემოთ
+    doc.add_paragraph("_" * 70).alignment = WD_ALIGN_PARAGRAPH.CENTER
+    doc.add_paragraph("") # ცარიელი ადგილი
+
+    # ტექსტის დაშლა
     lines = text_content.split('\n')
 
     for line in lines:
         line = line.strip()
-        if not line: continue # ცარიელ ხაზებს ვტოვებთ
+        if not line: continue
 
-        # 1. სათაურების დამუშავება (###)
-        if line.startswith('### '):
-            clean_text = line.replace('### ', '')
-            doc.add_heading(clean_text, level=2)
+        # --- სათაურები (###) ---
+        if line.startswith('### ') or line.startswith('## '):
+            clean_text = line.replace('#', '').strip()
+            heading = doc.add_heading(clean_text, level=2)
+            
+            # სათაურის სტილი (ლურჯი)
+            run = heading.runs[0]
+            run.font.color.rgb = RGBColor(0, 102, 204) # ღია ლურჯი
+            run.font.size = Pt(14)
+            run.font.name = 'Arial'
         
-        elif line.startswith('## '):
-            clean_text = line.replace('## ', '')
-            doc.add_heading(clean_text, level=1)
-
-        # 2. ბულეტების დამუშავება (- ან *)
+        # --- ბულეტები (- ან *) ---
         elif line.startswith('- ') or line.startswith('* '):
-            clean_text = line.replace('- ', '').replace('* ', '')
+            clean_text = line.replace('- ', '').replace('* ', '').strip()
             p = doc.add_paragraph(clean_text, style='List Bullet')
-            # გამუქების შემოწმება ბულეტებშიც
+            
+            # ბულეტებში გამუქების დამუშავება
             if "**" in clean_text:
-                p.clear() # ვშლით ძველს და თავიდან ვაწყობთ გამუქებით
+                p.clear() # ვშლით და თავიდან ვაწყობთ
                 parts = clean_text.split("**")
                 for i, part in enumerate(parts):
                     run = p.add_run(part)
-                    if i % 2 == 1: # ყოველი მეორე ნაწილი გამუქდეს
+                    if i % 2 == 1: # გამუქება
                         run.bold = True
+                        run.font.color.rgb = RGBColor(50, 50, 50) # მუქი ნაცრისფერი
 
-        # 3. ჩვეულებრივი ტექსტი + გამუქება (**ტექსტი**)
+        # --- ჩვეულებრივი ტექსტი ---
         else:
             p = doc.add_paragraph()
-            # ვამოწმებთ, არის თუ არა გასამუქებელი ადგილები
+            p.paragraph_format.space_after = Pt(6) # დაშორება აბზაცებს შორის
+
+            # გამუქების (**text**) დამუშავება
             if "**" in line:
                 parts = line.split("**")
                 for i, part in enumerate(parts):
                     run = p.add_run(part)
-                    if i % 2 == 1: # ლუწი ინდექსი = ჩვეულებრივი, კენტი = გამუქებული
+                    run.font.name = 'Arial'
+                    if i % 2 == 1: # გამუქება
                         run.bold = True
+                        run.font.color.rgb = RGBColor(0, 0, 0) # შავი
             else:
-                p.add_run(line)
+                run = p.add_run(line)
+                run.font.name = 'Arial'
+
+    # --- ფუტერი (ბოლოში მიაწეროს) ---
+    doc.add_paragraph("")
+    doc.add_paragraph("_" * 70).alignment = WD_ALIGN_PARAGRAPH.CENTER
+    footer = doc.add_paragraph("დოკუმენტი გენერირებულია Tender AI-ს მიერ")
+    footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    footer.runs[0].font.size = Pt(8)
+    footer.runs[0].font.color.rgb = RGBColor(128, 128, 128)
+
+    bio = io.BytesIO()
+    doc.save(bio)
+    return bio
 
     # ფაილის შენახვა მეხსიერებაში
     bio = io.BytesIO()
