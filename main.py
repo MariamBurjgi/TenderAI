@@ -4,6 +4,7 @@ import pandas as pd
 from docx import Document
 import io
 import re
+import zipfile
 from openai import OpenAI
 
 # --- 1. გვერდის კონფიგურაცია ---
@@ -77,7 +78,7 @@ st.write("ატვირთეთ PDF (დავალება) და Excel (
 # ატვირთვა (PDF + Excel)
 uploaded_files = st.file_uploader(
     "აირჩიეთ ფაილები", 
-    type=["pdf", "xlsx", "xls"], 
+    type=["pdf", "xlsx", "xls", "docx", "zip"], 
     accept_multiple_files=True 
 )
 
@@ -106,6 +107,54 @@ if uploaded_files:
                 # ცხრილის ჩვენება საიტზე
                 with st.expander(f"📊 ნახე Excel ცხრილი: {file.name}"):
                     st.dataframe(df)
+        # ---> WORD (.docx) ნაწილი <---
+        elif file.name.endswith(".docx"):
+            try:
+                doc = Document(file)
+                docx_text = ""
+                for para in doc.paragraphs:
+                    docx_text += para.text + "\n"
+                combined_text += f"\n\n--- Word ფაილი: {file.name} ---\n{docx_text}"
+            except Exception as e:
+                st.error(f"Word-ის შეცდომა: {e}")
+
+        # ---> ZIP (არქივი) ნაწილი <---
+        elif file.name.endswith(".zip"):
+            try:
+                with zipfile.ZipFile(file) as z:
+                    for sub_file_name in z.namelist():
+                        # სისტემურ ფაილებს (უცნაური სახელებით) არ ვეხებით
+                        if not sub_file_name.startswith("__") and not sub_file_name.endswith("/"):
+                            
+                            # ვხსნით ფაილს არქივიდან
+                            with z.open(sub_file_name) as f:
+                                file_bytes = io.BytesIO(f.read()) # მეხსიერებაში ვტვირთავთ
+                                
+                                # შიგნით ვამოწმებთ, რა ტიპია
+                                inner_text = ""
+                                
+                                # 1. თუ შიგნით PDF-ია
+                                if sub_file_name.endswith(".pdf"):
+                                    with pdfplumber.open(file_bytes) as pdf:
+                                        for page in pdf.pages:
+                                            txt = page.extract_text()
+                                            if txt: inner_text += txt + "\n"
+                                
+                                # 2. თუ შიგნით Word-ია
+                                elif sub_file_name.endswith(".docx"):
+                                    doc = Document(file_bytes)
+                                    for para in doc.paragraphs:
+                                        inner_text += para.text + "\n"
+                                
+                                # 3. თუ შიგნით Excel-ია
+                                elif sub_file_name.endswith(".xlsx"):
+                                    df = pd.read_excel(file_bytes)
+                                    inner_text = df.to_string(index=False)
+                                
+                                if inner_text:
+                                    combined_text += f"\n\n--- ZIP-ში ნაპოვნი ფაილი: {sub_file_name} ---\n{inner_text}"
+            except Exception as e:
+                st.error(f"ZIP-ის გახსნის შეცდომა: {e}")         
                 
                 # ტექსტად ქცევა AI-სთვის
                 excel_text = df.to_string(index=False)
