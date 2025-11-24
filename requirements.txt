@@ -4,3 +4,4 @@ python-docx
 openai
 pandas
 openpyxl
+htmldocx 
